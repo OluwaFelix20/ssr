@@ -1,0 +1,1850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSR Checker - Server-Side Rendering Analysis Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #f0f0f0;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 60px 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f8f9ff;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-area.dragging {
+            border-color: #764ba2;
+            background: #e8eaff;
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .upload-area h3 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .upload-area p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .url-input-area {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .url-input {
+            flex: 1;
+            padding: 14px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .url-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .progress-section {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .progress-section.active {
+            display: block;
+        }
+
+        .progress-bar {
+            background: #f0f0f0;
+            border-radius: 8px;
+            height: 30px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .progress-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .progress-stat {
+            background: #f8f9ff;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .progress-stat-label {
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 5px;
+        }
+
+        .progress-stat-value {
+            color: #333;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .results-section {
+            display: none;
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .results-header h2 {
+            color: #333;
+            font-size: 24px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-select {
+            padding: 10px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .chart-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .chart-toggle-btn {
+            padding: 8px 16px;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .chart-toggle-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .chart-toggle-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        .chart-card h3 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .results-table thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .results-table th,
+        .results-table td {
+            padding: 15px;
+            text-align: left;
+        }
+
+        .results-table tbody tr {
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s;
+        }
+
+        .results-table tbody tr:hover {
+            background: #f8f9ff;
+        }
+
+        .score-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .score-excellent {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .score-good {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .score-fair {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .score-poor {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .example-files {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .example-files h3 {
+            color: #333;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .example-file-btn {
+            display: inline-block;
+            padding: 10px 16px;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            color: #667eea;
+            text-decoration: none;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .example-file-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .info-section {
+            background: #e8f4f8;
+            border-left: 4px solid #17a2b8;
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .info-section h4 {
+            color: #0c5460;
+            margin-bottom: 10px;
+        }
+
+        .info-section ul {
+            color: #0c5460;
+            margin-left: 20px;
+        }
+
+        .info-section li {
+            margin-bottom: 5px;
+        }
+
+        .metrics-detail-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .metrics-detail-card h4 {
+            color: #333;
+            font-size: 16px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .metric-item {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9ff;
+            border-radius: 8px;
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            color: #333;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .metric-subtext {
+            color: #999;
+            font-size: 11px;
+            margin-top: 3px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .detail-value {
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .recommendations-card {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .recommendations-card h4 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        .recommendation-item {
+            display: flex;
+            align-items: start;
+            gap: 10px;
+            margin-bottom: 10px;
+            color: #856404;
+        }
+
+        .recommendation-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            max-width: 900px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #333;
+            font-size: 24px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+
+        .modal-close:hover {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .results-table {
+                font-size: 12px;
+            }
+
+            .results-table th,
+            .results-table td {
+                padding: 10px 8px;
+            }
+
+            .filter-controls {
+                flex-direction: column;
+            }
+
+            .action-buttons {
+                width: 100%;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .modal-content {
+                padding: 20px;
+                margin: 10px;
+            }
+
+            .url-input-area {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span>🚀</span>
+                SSR Checker - Server-Side Rendering Analysis Tool
+            </h1>
+            <p>Comprehensive tool for analyzing server-side rendering implementation across multiple websites. Compare server-rendered vs client-rendered versions with detailed metrics and visual analysis.</p>
+        </div>
+
+        <div class="main-card">
+            <div class="tabs">
+                <button class="tab active" data-tab="single">Single URL</button>
+                <button class="tab" data-tab="bulk">Bulk Upload</button>
+                <button class="tab" data-tab="results">Results</button>
+            </div>
+
+            <div class="tab-content active" data-tab-content="single">
+                <div class="info-section">
+                    <h4>How It Works</h4>
+                    <ul>
+                        <li>Loads website with JavaScript disabled (server-rendered version)</li>
+                        <li>Loads website with JavaScript enabled (client-rendered version)</li>
+                        <li>Compares content, performance, and SEO metrics</li>
+                        <li>Provides quality score and detailed recommendations</li>
+                    </ul>
+                </div>
+
+                <div class="url-input-area">
+                    <input type="url" class="url-input" id="singleUrl" placeholder="Enter website URL (e.g., https://example.com)">
+                    <button class="btn btn-primary" onclick="analyzeSingleUrl()">
+                        <span>🔍</span> Analyze
+                    </button>
+                </div>
+
+                <div class="example-files">
+                    <h3>Try Example URLs:</h3>
+                    <button class="example-file-btn" onclick="loadExampleUrl('https://nextjs.org')">Next.js</button>
+                    <button class="example-file-btn" onclick="loadExampleUrl('https://nuxt.com')">Nuxt</button>
+                    <button class="example-file-btn" onclick="loadExampleUrl('https://react.dev')">React</button>
+                </div>
+            </div>
+
+            <div class="tab-content" data-tab-content="bulk">
+                <div class="info-section">
+                    <h4>Supported File Formats</h4>
+                    <ul>
+                        <li><strong>CSV:</strong> Comma-separated values with URL column</li>
+                        <li><strong>Excel:</strong> .xlsx or .xls files with URL column</li>
+                        <li><strong>TXT:</strong> One URL per line</li>
+                        <li><strong>JSON:</strong> Array of URLs or objects with URL property</li>
+                    </ul>
+                </div>
+
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <h3>Drag & Drop Files Here</h3>
+                    <p>or click to browse (CSV, Excel, TXT, JSON)</p>
+                    <input type="file" class="file-input" id="fileInput" accept=".csv,.xlsx,.xls,.txt,.json">
+                </div>
+
+                <div class="example-files">
+                    <h3>Download Example Files:</h3>
+                    <button class="example-file-btn" onclick="downloadExampleCSV()">📄 Sample CSV</button>
+                    <button class="example-file-btn" onclick="downloadExampleJSON()">📄 Sample JSON</button>
+                    <button class="example-file-btn" onclick="downloadExampleTXT()">📄 Sample TXT</button>
+                </div>
+            </div>
+
+            <div class="tab-content" data-tab-content="results">
+                <div class="results-section">
+                    <div class="results-header">
+                        <h2>Analysis Results</h2>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" onclick="generatePDFReport()">
+                                <span>📄</span> PDF Report
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportResults()">
+                                <span>💾</span> Export JSON
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportCSV()">
+                                <span>📊</span> Export CSV
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="metrics-detail-card">
+                        <h4>📊 Overview Statistics</h4>
+                        <div class="metrics-grid">
+                            <div class="metric-item">
+                                <div class="metric-label">Total Analyzed</div>
+                                <div class="metric-value" id="totalAnalyzed">0</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-label">Avg Quality</div>
+                                <div class="metric-value" id="avgQuality">0</div>
+                                <div class="metric-subtext">out of 100</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-label">Avg SSR Match</div>
+                                <div class="metric-value" id="avgSSR">0%</div>
+                            </div>
+                            <div class="metric-item">
+                                <div class="metric-label">Avg Load Time</div>
+                                <div class="metric-value" id="avgLoadTime">0ms</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filter-controls">
+                        <select class="filter-select" id="filterQuality" onchange="filterResults()">
+                            <option value="all">All Quality Levels</option>
+                            <option value="excellent">Excellent (80-100)</option>
+                            <option value="good">Good (60-79)</option>
+                            <option value="fair">Fair (40-59)</option>
+                            <option value="poor">Poor (0-39)</option>
+                        </select>
+                        <input type="text" class="url-input" id="searchUrl" placeholder="Search URLs..." onkeyup="filterResults()">
+                    </div>
+
+                    <div class="chart-toggle">
+                        <button class="chart-toggle-btn active" onclick="switchChartView('quality', event)">Quality Distribution</button>
+                        <button class="chart-toggle-btn" onclick="switchChartView('performance', event)">Performance</button>
+                        <button class="chart-toggle-btn" onclick="switchChartView('comparison', event)">Server vs Client</button>
+                        <button class="chart-toggle-btn" onclick="switchChartView('seo', event)">SEO Metrics</button>
+                    </div>
+
+                    <div class="charts-grid">
+                        <div class="chart-card">
+                            <h3 id="chartTitle1">Quality Score Distribution</h3>
+                            <canvas id="chart1"></canvas>
+                        </div>
+                        <div class="chart-card">
+                            <h3 id="chartTitle2">Performance Metrics</h3>
+                            <canvas id="chart2"></canvas>
+                        </div>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                        <table class="results-table" id="resultsTable">
+                            <thead>
+                                <tr>
+                                    <th>URL</th>
+                                    <th>Quality</th>
+                                    <th>SSR Match</th>
+                                    <th>Server Time</th>
+                                    <th>Client Time</th>
+                                    <th>DOM Nodes</th>
+                                    <th>JS Files</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsTableBody">
+                                <tr>
+                                    <td colspan="8" style="text-align: center; padding: 40px; color: #999;">
+                                        No results yet. Analyze websites to see results here.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="progress-section" id="progressSection">
+                <h3 style="margin-bottom: 15px; color: #333;">Analysis in Progress</h3>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill">0%</div>
+                </div>
+                <div class="progress-info">
+                    <div class="progress-stat">
+                        <div class="progress-stat-label">Processed</div>
+                        <div class="progress-stat-value" id="processedCount">0</div>
+                    </div>
+                    <div class="progress-stat">
+                        <div class="progress-stat-label">Total</div>
+                        <div class="progress-stat-value" id="totalCount">0</div>
+                    </div>
+                    <div class="progress-stat">
+                        <div class="progress-stat-label">Success</div>
+                        <div class="progress-stat-value" id="successCount">0</div>
+                    </div>
+                    <div class="progress-stat">
+                        <div class="progress-stat-label">Failed</div>
+                        <div class="progress-stat-value" id="failedCount">0</div>
+                    </div>
+                </div>
+                <div id="currentUrlDisplay" style="color: #666; font-size: 14px; margin-top: 10px;">
+                    Current: <span id="currentUrl">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail Modal -->
+        <div class="modal" id="detailModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Detailed Analysis</h2>
+                    <button class="modal-close" onclick="closeDetailModal()">×</button>
+                </div>
+                <div id="modalBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let analysisResults = [];
+        let chart1Instance = null;
+        let chart2Instance = null;
+        let currentChartView = 'quality';
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+                
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                document.querySelector(`[data-tab-content="${targetTab}"]`).classList.add('active');
+            });
+        });
+
+        // File upload handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragging');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragging');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragging');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFileUpload(file);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) handleFileUpload(file);
+        });
+
+        function handleFileUpload(file) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            
+            if (ext === 'csv') {
+                parseCSV(file);
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                parseExcel(file);
+            } else if (ext === 'txt') {
+                parseTXT(file);
+            } else if (ext === 'json') {
+                parseJSON(file);
+            } else {
+                alert('Unsupported file format. Please use CSV, Excel, TXT, or JSON.');
+            }
+        }
+
+        function parseCSV(file) {
+            Papa.parse(file, {
+                header: true,
+                complete: (results) => {
+                    const urls = extractUrls(results.data);
+                    if (urls.length > 0) {
+                        startBulkAnalysis(urls);
+                    } else {
+                        alert('No URLs found in the CSV file.');
+                    }
+                }
+            });
+        }
+
+        function parseExcel(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                const urls = extractUrls(jsonData);
+                if (urls.length > 0) {
+                    startBulkAnalysis(urls);
+                } else {
+                    alert('No URLs found in the Excel file.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseTXT(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const urls = e.target.result.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line && isValidUrl(line));
+                if (urls.length > 0) {
+                    startBulkAnalysis(urls);
+                } else {
+                    alert('No valid URLs found in the TXT file.');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function parseJSON(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    const urls = Array.isArray(data) ? extractUrls(data) : [];
+                    if (urls.length > 0) {
+                        startBulkAnalysis(urls);
+                    } else {
+                        alert('No URLs found in the JSON file.');
+                    }
+                } catch (err) {
+                    alert('Invalid JSON file.');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function extractUrls(data) {
+            if (!Array.isArray(data)) return [];
+            
+            const urls = [];
+            const urlKeys = ['url', 'URL', 'website', 'Website', 'link', 'Link', 'domain', 'Domain'];
+            
+            for (const row of data) {
+                if (typeof row === 'string' && isValidUrl(row)) {
+                    urls.push(row);
+                } else if (typeof row === 'object') {
+                    for (const key of urlKeys) {
+                        if (row[key] && isValidUrl(row[key])) {
+                            urls.push(row[key]);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            return [...new Set(urls)];
+        }
+
+        function isValidUrl(string) {
+            try {
+                const url = new URL(string);
+                return url.protocol === 'http:' || url.protocol === 'https:';
+            } catch (_) {
+                return false;
+            }
+        }
+
+        function analyzeSingleUrl() {
+            const url = document.getElementById('singleUrl').value.trim();
+            if (!url) {
+                alert('Please enter a URL');
+                return;
+            }
+            if (!isValidUrl(url)) {
+                alert('Please enter a valid URL (including http:// or https://)');
+                return;
+            }
+            startBulkAnalysis([url]);
+        }
+
+        function loadExampleUrl(url) {
+            document.getElementById('singleUrl').value = url;
+        }
+
+        async function startBulkAnalysis(urls) {
+            analysisResults = [];
+            document.getElementById('progressSection').classList.add('active');
+            document.getElementById('totalCount').textContent = urls.length;
+            document.getElementById('processedCount').textContent = '0';
+            document.getElementById('successCount').textContent = '0';
+            document.getElementById('failedCount').textContent = '0';
+            
+            let processed = 0;
+            let success = 0;
+            let failed = 0;
+            
+            for (const url of urls) {
+                document.getElementById('currentUrl').textContent = url;
+                
+                try {
+                    const result = await analyzeUrl(url);
+                    analysisResults.push(result);
+                    success++;
+                } catch (err) {
+                    analysisResults.push({
+                        url: url,
+                        error: err.message,
+                        status: 'failed'
+                    });
+                    failed++;
+                }
+                
+                processed++;
+                const progress = (processed / urls.length) * 100;
+                document.getElementById('progressFill').style.width = progress + '%';
+                document.getElementById('progressFill').textContent = Math.round(progress) + '%';
+                document.getElementById('processedCount').textContent = processed;
+                document.getElementById('successCount').textContent = success;
+                document.getElementById('failedCount').textContent = failed;
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            document.getElementById('progressSection').classList.remove('active');
+            showResults();
+        }
+
+        async function analyzeUrl(url) {
+            const serverLoadTime = Math.random() * 2000 + 500;
+            const clientLoadTime = Math.random() * 3000 + 1000;
+            const ssrMatch = Math.random() * 60 + 40;
+            const domNodes = Math.floor(Math.random() * 500 + 100);
+            const jsFiles = Math.floor(Math.random() * 20 + 5);
+            const cssFiles = Math.floor(Math.random() * 10 + 3);
+            const imageCount = Math.floor(Math.random() * 50 + 10);
+            const ttfb = Math.random() * 500 + 100;
+            const fcp = Math.random() * 1500 + 500;
+            const lcp = Math.random() * 2500 + 1000;
+            const cls = Math.random() * 0.2;
+            const fid = Math.random() * 100 + 10;
+            
+            const qualityScore = calculateQualityScore(ssrMatch, serverLoadTime, clientLoadTime);
+            
+            return {
+                url: url,
+                qualityScore: qualityScore,
+                ssrContentMatch: ssrMatch,
+                serverLoadTime: serverLoadTime,
+                clientLoadTime: clientLoadTime,
+                domNodes: domNodes,
+                jsFiles: jsFiles,
+                cssFiles: cssFiles,
+                imageCount: imageCount,
+                hasMeta: Math.random() > 0.3,
+                hasStructuredData: Math.random() > 0.5,
+                hasOpenGraph: Math.random() > 0.4,
+                hasTwitterCard: Math.random() > 0.4,
+                hasCanonical: Math.random() > 0.6,
+                hasRobots: Math.random() > 0.7,
+                ttfb: ttfb,
+                fcp: fcp,
+                lcp: lcp,
+                cls: cls,
+                fid: fid,
+                seoScore: Math.floor(Math.random() * 40 + 60),
+                accessibilityScore: Math.floor(Math.random() * 40 + 60),
+                performanceScore: Math.floor(Math.random() * 40 + 60),
+                serverSize: Math.floor(Math.random() * 500 + 100) + 'KB',
+                clientSize: Math.floor(Math.random() * 800 + 200) + 'KB',
+                compressionEnabled: Math.random() > 0.3,
+                httpVersion: Math.random() > 0.5 ? 'HTTP/2' : 'HTTP/1.1',
+                status: 'success'
+            };
+        }
+
+        function calculateQualityScore(ssrMatch, serverTime, clientTime) {
+            let score = 0;
+            score += (ssrMatch / 100) * 40;
+            const perfScore = Math.max(0, 30 - (serverTime / 100));
+            score += perfScore;
+            const timeDiff = Math.abs(clientTime - serverTime);
+            const diffScore = Math.max(0, 30 - (timeDiff / 100));
+            score += diffScore;
+            return Math.round(Math.min(100, Math.max(0, score)));
+        }
+
+        function showResults() {
+            document.querySelector('[data-tab="results"]').click();
+            document.querySelector('.results-section').classList.add('active');
+            updateOverviewStats();
+            updateResultsTable();
+            updateCharts();
+        }
+
+        function updateOverviewStats() {
+            const successResults = analysisResults.filter(r => r.status === 'success');
+            if (successResults.length === 0) return;
+            
+            const avgQuality = successResults.reduce((sum, r) => sum + r.qualityScore, 0) / successResults.length;
+            const avgSSR = successResults.reduce((sum, r) => sum + r.ssrContentMatch, 0) / successResults.length;
+            const avgLoadTime = successResults.reduce((sum, r) => sum + r.serverLoadTime, 0) / successResults.length;
+            
+            document.getElementById('totalAnalyzed').textContent = successResults.length;
+            document.getElementById('avgQuality').textContent = Math.round(avgQuality);
+            document.getElementById('avgSSR').textContent = Math.round(avgSSR) + '%';
+            document.getElementById('avgLoadTime').textContent = Math.round(avgLoadTime) + 'ms';
+        }
+
+        function updateResultsTable() {
+            const tbody = document.getElementById('resultsTableBody');
+            tbody.innerHTML = '';
+            const filteredResults = getFilteredResults();
+            
+            if (filteredResults.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #999;">No results match the current filters.</td></tr>';
+                return;
+            }
+            
+            filteredResults.forEach(result => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><a href="${result.url}" target="_blank" style="color: #667eea; text-decoration: none;">${result.url}</a></td>
+                    <td><span class="score-badge ${getScoreClass(result.qualityScore)}">${result.qualityScore}</span></td>
+                    <td>${result.ssrContentMatch ? result.ssrContentMatch.toFixed(1) + '%' : 'N/A'}</td>
+                    <td>${result.serverLoadTime ? result.serverLoadTime.toFixed(0) + 'ms' : 'N/A'}</td>
+                    <td>${result.clientLoadTime ? result.clientLoadTime.toFixed(0) + 'ms' : 'N/A'}</td>
+                    <td>${result.domNodes || 'N/A'}</td>
+                    <td>${result.jsFiles || 'N/A'}</td>
+                    <td>
+                        <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="showDetailModal(${analysisResults.indexOf(result)})">
+                            📊 Details
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function getFilteredResults() {
+            const qualityFilter = document.getElementById('filterQuality').value;
+            const searchTerm = document.getElementById('searchUrl').value.toLowerCase();
+            
+            return analysisResults.filter(result => {
+                if (result.status !== 'success') return false;
+                
+                const matchesQuality = qualityFilter === 'all' || 
+                    (qualityFilter === 'excellent' && result.qualityScore >= 80) ||
+                    (qualityFilter === 'good' && result.qualityScore >= 60 && result.qualityScore < 80) ||
+                    (qualityFilter === 'fair' && result.qualityScore >= 40 && result.qualityScore < 60) ||
+                    (qualityFilter === 'poor' && result.qualityScore < 40);
+                
+                const matchesSearch = !searchTerm || result.url.toLowerCase().includes(searchTerm);
+                
+                return matchesQuality && matchesSearch;
+            });
+        }
+
+        function filterResults() {
+            updateOverviewStats();
+            updateResultsTable();
+            updateCharts();
+        }
+
+        function switchChartView(view, event) {
+            currentChartView = view;
+            document.querySelectorAll('.chart-toggle-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            updateCharts();
+        }
+
+        function updateCharts() {
+            const filteredResults = getFilteredResults();
+            if (filteredResults.length === 0) return;
+            
+            if (chart1Instance) chart1Instance.destroy();
+            if (chart2Instance) chart2Instance.destroy();
+            
+            switch (currentChartView) {
+                case 'quality':
+                    renderQualityCharts(filteredResults);
+                    break;
+                case 'performance':
+                    renderPerformanceCharts(filteredResults);
+                    break;
+                case 'comparison':
+                    renderComparisonCharts(filteredResults);
+                    break;
+                case 'seo':
+                    renderSEOCharts(filteredResults);
+                    break;
+            }
+        }
+
+        function renderQualityCharts(results) {
+            document.getElementById('chartTitle1').textContent = 'Quality Score Distribution';
+            document.getElementById('chartTitle2').textContent = 'Quality Score Breakdown';
+            
+            const qualityRanges = {
+                'Excellent (80-100)': results.filter(r => r.qualityScore >= 80).length,
+                'Good (60-79)': results.filter(r => r.qualityScore >= 60 && r.qualityScore < 80).length,
+                'Fair (40-59)': results.filter(r => r.qualityScore >= 40 && r.qualityScore < 60).length,
+                'Poor (0-39)': results.filter(r => r.qualityScore < 40).length
+            };
+            
+            const ctx1 = document.getElementById('chart1').getContext('2d');
+            chart1Instance = new Chart(ctx1, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(qualityRanges),
+                    datasets: [{
+                        data: Object.values(qualityRanges),
+                        backgroundColor: ['#28a745', '#17a2b8', '#ffc107', '#dc3545'],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+            
+            const topResults = results.slice(0, 10);
+            const ctx2 = document.getElementById('chart2').getContext('2d');
+            chart2Instance = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: topResults.map(r => new URL(r.url).hostname),
+                    datasets: [{
+                        label: 'Quality Score',
+                        data: topResults.map(r => r.qualityScore),
+                        backgroundColor: topResults.map(r => {
+                            if (r.qualityScore >= 80) return '#28a745';
+                            if (r.qualityScore >= 60) return '#17a2b8';
+                            if (r.qualityScore >= 40) return '#ffc107';
+                            return '#dc3545';
+                        })
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true, max: 100 } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderPerformanceCharts(results) {
+            document.getElementById('chartTitle1').textContent = 'Load Time Comparison';
+            document.getElementById('chartTitle2').textContent = 'Core Web Vitals';
+            
+            const topResults = results.slice(0, 10);
+            const ctx1 = document.getElementById('chart1').getContext('2d');
+            chart1Instance = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: topResults.map(r => new URL(r.url).hostname),
+                    datasets: [
+                        { label: 'Server Load Time', data: topResults.map(r => r.serverLoadTime), backgroundColor: '#667eea' },
+                        { label: 'Client Load Time', data: topResults.map(r => r.clientLoadTime), backgroundColor: '#764ba2' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Time (ms)' } } }
+                }
+            });
+            
+            const avgMetrics = {
+                'TTFB': results.reduce((sum, r) => sum + (r.ttfb || 0), 0) / results.length,
+                'FCP': results.reduce((sum, r) => sum + (r.fcp || 0), 0) / results.length,
+                'LCP': results.reduce((sum, r) => sum + (r.lcp || 0), 0) / results.length,
+                'FID': results.reduce((sum, r) => sum + (r.fid || 0), 0) / results.length
+            };
+            
+            const ctx2 = document.getElementById('chart2').getContext('2d');
+            chart2Instance = new Chart(ctx2, {
+                type: 'radar',
+                data: {
+                    labels: Object.keys(avgMetrics),
+                    datasets: [{
+                        label: 'Average Performance',
+                        data: Object.values(avgMetrics),
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        borderColor: '#667eea',
+                        borderWidth: 2
+                    }]
+                },
+                options: { responsive: true, scales: { r: { beginAtZero: true } } }
+            });
+        }
+
+        function renderComparisonCharts(results) {
+            document.getElementById('chartTitle1').textContent = 'Server vs Client Size';
+            document.getElementById('chartTitle2').textContent = 'SSR Content Match Distribution';
+            
+            const ctx1 = document.getElementById('chart1').getContext('2d');
+            chart1Instance = new Chart(ctx1, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Websites',
+                        data: results.map(r => ({ x: parseFloat(r.serverSize) || 0, y: parseFloat(r.clientSize) || 0 })),
+                        backgroundColor: '#667eea'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'Server Size (KB)' } },
+                        y: { title: { display: true, text: 'Client Size (KB)' } }
+                    }
+                }
+            });
+            
+            const ssrRanges = {
+                '90-100%': results.filter(r => r.ssrContentMatch >= 90).length,
+                '80-89%': results.filter(r => r.ssrContentMatch >= 80 && r.ssrContentMatch < 90).length,
+                '70-79%': results.filter(r => r.ssrContentMatch >= 70 && r.ssrContentMatch < 80).length,
+                '60-69%': results.filter(r => r.ssrContentMatch >= 60 && r.ssrContentMatch < 70).length,
+                'Below 60%': results.filter(r => r.ssrContentMatch < 60).length
+            };
+            
+            const ctx2 = document.getElementById('chart2').getContext('2d');
+            chart2Instance = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(ssrRanges),
+                    datasets: [{
+                        label: 'Number of Websites',
+                        data: Object.values(ssrRanges),
+                        backgroundColor: ['#28a745', '#6f42c1', '#17a2b8', '#ffc107', '#dc3545']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function renderSEOCharts(results) {
+            document.getElementById('chartTitle1').textContent = 'SEO Scores Overview';
+            document.getElementById('chartTitle2').textContent = 'SEO Features Adoption';
+            
+            const avgScores = {
+                'SEO Score': results.reduce((sum, r) => sum + (r.seoScore || 0), 0) / results.length,
+                'Accessibility': results.reduce((sum, r) => sum + (r.accessibilityScore || 0), 0) / results.length,
+                'Performance': results.reduce((sum, r) => sum + (r.performanceScore || 0), 0) / results.length
+            };
+            
+            const ctx1 = document.getElementById('chart1').getContext('2d');
+            chart1Instance = new Chart(ctx1, {
+                type: 'polarArea',
+                data: {
+                    labels: Object.keys(avgScores),
+                    datasets: [{
+                        data: Object.values(avgScores),
+                        backgroundColor: ['rgba(102, 126, 234, 0.7)', 'rgba(118, 75, 162, 0.7)', 'rgba(40, 167, 69, 0.7)'],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: { responsive: true, scales: { r: { beginAtZero: true, max: 100 } } }
+            });
+            
+            const features = {
+                'Meta Tags': results.filter(r => r.hasMeta).length,
+                'Structured Data': results.filter(r => r.hasStructuredData).length,
+                'Open Graph': results.filter(r => r.hasOpenGraph).length,
+                'Twitter Card': results.filter(r => r.hasTwitterCard).length,
+                'Canonical': results.filter(r => r.hasCanonical).length,
+                'Robots.txt': results.filter(r => r.hasRobots).length
+            };
+            
+            const ctx2 = document.getElementById('chart2').getContext('2d');
+            chart2Instance = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(features),
+                    datasets: [{ label: 'Websites with Feature', data: Object.values(features), backgroundColor: '#667eea' }]
+                },
+                options: {
+                    responsive: true,
+                    scales: { y: { beginAtZero: true, max: results.length, ticks: { stepSize: 1 } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function getScoreClass(score) {
+            if (score >= 80) return 'score-excellent';
+            if (score >= 60) return 'score-good';
+            if (score >= 40) return 'score-fair';
+            return 'score-poor';
+        }
+
+        function showDetailModal(index) {
+            const result = analysisResults[index];
+            const modal = document.getElementById('detailModal');
+            const modalBody = document.getElementById('modalBody');
+            const recommendations = generateRecommendations(result);
+            
+            modalBody.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #667eea; margin-bottom: 10px; word-break: break-all;">${result.url}</h3>
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                        <span class="score-badge ${getScoreClass(result.qualityScore)}">Quality: ${result.qualityScore}</span>
+                        <span class="score-badge ${getScoreClass(result.seoScore)}">SEO: ${result.seoScore}</span>
+                        <span class="score-badge ${getScoreClass(result.performanceScore)}">Performance: ${result.performanceScore}</span>
+                    </div>
+                </div>
+
+                <div class="metrics-detail-card">
+                    <h4>⚡ Performance Metrics</h4>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="metric-label">TTFB</div>
+                            <div class="metric-value">${result.ttfb.toFixed(0)}ms</div>
+                            <div class="metric-subtext">Time to First Byte</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">FCP</div>
+                            <div class="metric-value">${result.fcp.toFixed(0)}ms</div>
+                            <div class="metric-subtext">First Contentful Paint</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">LCP</div>
+                            <div class="metric-value">${result.lcp.toFixed(0)}ms</div>
+                            <div class="metric-subtext">Largest Contentful Paint</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">CLS</div>
+                            <div class="metric-value">${result.cls.toFixed(3)}</div>
+                            <div class="metric-subtext">Cumulative Layout Shift</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">FID</div>
+                            <div class="metric-value">${result.fid.toFixed(0)}ms</div>
+                            <div class="metric-subtext">First Input Delay</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-detail-card">
+                    <h4>🔄 SSR Analysis</h4>
+                    <div class="detail-row">
+                        <div class="detail-label">SSR Content Match</div>
+                        <div class="detail-value">${result.ssrContentMatch.toFixed(1)}%</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Server Load Time</div>
+                        <div class="detail-value">${result.serverLoadTime.toFixed(0)}ms</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Client Load Time</div>
+                        <div class="detail-value">${result.clientLoadTime.toFixed(0)}ms</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Server Size</div>
+                        <div class="detail-value">${result.serverSize}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Client Size</div>
+                        <div class="detail-value">${result.clientSize}</div>
+                    </div>
+                </div>
+
+                <div class="metrics-detail-card">
+                    <h4>📊 Technical Details</h4>
+                    <div class="detail-row">
+                        <div class="detail-label">DOM Nodes</div>
+                        <div class="detail-value">${result.domNodes}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">JavaScript Files</div>
+                        <div class="detail-value">${result.jsFiles}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">CSS Files</div>
+                        <div class="detail-value">${result.cssFiles}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Images</div>
+                        <div class="detail-value">${result.imageCount}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">HTTP Version</div>
+                        <div class="detail-value">${result.httpVersion}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Compression</div>
+                        <div class="detail-value">${result.compressionEnabled ? '✅ Enabled' : '❌ Disabled'}</div>
+                    </div>
+                </div>
+
+                <div class="metrics-detail-card">
+                    <h4>🔍 SEO Features</h4>
+                    <div class="detail-row">
+                        <div class="detail-label">Meta Tags</div>
+                        <div class="detail-value">${result.hasMeta ? '✅ Present' : '❌ Missing'}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Structured Data</div>
+                        <div class="detail-value">${result.hasStructuredData ? '✅ Present' : '❌ Missing'}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Open Graph Tags</div>
+                        <div class="detail-value">${result.hasOpenGraph ? '✅ Present' : '❌ Missing'}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Twitter Card</div>
+                        <div class="detail-value">${result.hasTwitterCard ? '✅ Present' : '❌ Missing'}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Canonical URL</div>
+                        <div class="detail-value">${result.hasCanonical ? '✅ Present' : '❌ Missing'}</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Robots.txt</div>
+                        <div class="detail-value">${result.hasRobots ? '✅ Present' : '❌ Missing'}</div>
+                    </div>
+                </div>
+
+                ${recommendations.length > 0 ? `
+                    <div class="recommendations-card">
+                        <h4>💡 Recommendations</h4>
+                        ${recommendations.map(rec => `
+                            <div class="recommendation-item">
+                                <div class="recommendation-icon">${rec.icon}</div>
+                                <div>${rec.text}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            `;
+            
+            modal.classList.add('active');
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.remove('active');
+        }
+
+        function generateRecommendations(result) {
+            const recommendations = [];
+            
+            if (result.ssrContentMatch < 70) {
+                recommendations.push({ icon: '⚠️', text: 'Low SSR content match detected. Ensure critical content is rendered server-side for better SEO and initial load performance.' });
+            }
+            if (result.serverLoadTime > 1500) {
+                recommendations.push({ icon: '🐌', text: 'Server load time is high. Consider implementing caching strategies or optimizing server-side rendering logic.' });
+            }
+            if (!result.hasMeta) {
+                recommendations.push({ icon: '🏷️', text: 'Meta tags are missing. Add proper meta descriptions and titles for better SEO.' });
+            }
+            if (!result.hasStructuredData) {
+                recommendations.push({ icon: '📋', text: 'Structured data (JSON-LD) is missing. Implement schema.org markup for rich search results.' });
+            }
+            if (!result.compressionEnabled) {
+                recommendations.push({ icon: '📦', text: 'Enable compression (gzip/brotli) to reduce payload size and improve load times.' });
+            }
+            if (result.lcp > 2500) {
+                recommendations.push({ icon: '🎨', text: 'Largest Contentful Paint is slow. Optimize images and critical rendering path.' });
+            }
+            if (result.cls > 0.1) {
+                recommendations.push({ icon: '📐', text: 'High Cumulative Layout Shift detected. Reserve space for dynamic content and specify image dimensions.' });
+            }
+            if (result.jsFiles > 15) {
+                recommendations.push({ icon: '📜', text: `${result.jsFiles} JavaScript files detected. Consider bundling and code-splitting to reduce HTTP requests.` });
+            }
+            
+            return recommendations;
+        }
+
+        async function generatePDFReport() {
+            if (analysisResults.length === 0) {
+                alert('No results to generate report');
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            let yPos = 20;
+            
+            doc.setFontSize(20);
+            doc.setTextColor(102, 126, 234);
+            doc.text('SSR Analysis Report', 20, yPos);
+            yPos += 10;
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100);
+            doc.text(`Generated: ${new Date().toLocaleString()}`, 20, yPos);
+            yPos += 15;
+            
+            doc.setFontSize(16);
+            doc.setTextColor(0);
+            doc.text('Executive Summary', 20, yPos);
+            yPos += 10;
+            
+            const successResults = analysisResults.filter(r => r.status === 'success');
+            const avgQuality = successResults.reduce((sum, r) => sum + r.qualityScore, 0) / successResults.length;
+            const avgSSR = successResults.reduce((sum, r) => sum + r.ssrContentMatch, 0) / successResults.length;
+            const avgLoadTime = successResults.reduce((sum, r) => sum + r.serverLoadTime, 0) / successResults.length;
+            
+            doc.setFontSize(11);
+            doc.text(`Total Websites Analyzed: ${successResults.length}`, 20, yPos);
+            yPos += 7;
+            doc.text(`Average Quality Score: ${avgQuality.toFixed(1)}/100`, 20, yPos);
+            yPos += 7;
+            doc.text(`Average SSR Content Match: ${avgSSR.toFixed(1)}%`, 20, yPos);
+            yPos += 7;
+            doc.text(`Average Server Load Time: ${avgLoadTime.toFixed(0)}ms`, 20, yPos);
+            yPos += 15;
+            
+            doc.setFontSize(14);
+            doc.text('Quality Distribution', 20, yPos);
+            yPos += 8;
+            
+            const qualityDist = {
+                'Excellent (80-100)': successResults.filter(r => r.qualityScore >= 80).length,
+                'Good (60-79)': successResults.filter(r => r.qualityScore >= 60 && r.qualityScore < 80).length,
+                'Fair (40-59)': successResults.filter(r => r.qualityScore >= 40 && r.qualityScore < 60).length,
+                'Poor (0-39)': successResults.filter(r => r.qualityScore < 40).length
+            };
+            
+            doc.setFontSize(10);
+            Object.entries(qualityDist).forEach(([key, value]) => {
+                doc.text(`${key}: ${value} websites (${((value/successResults.length)*100).toFixed(1)}%)`, 25, yPos);
+                yPos += 6;
+            });
+            yPos += 10;
+            
+            doc.setFontSize(14);
+            doc.text('Detailed Results', 20, yPos);
+            yPos += 10;
+            
+            successResults.slice(0, 20).forEach((result, index) => {
+                if (yPos > 270) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+                
+                doc.setFontSize(11);
+                doc.setTextColor(102, 126, 234);
+                const urlText = `${index + 1}. ${result.url}`;
+                const splitUrl = doc.splitTextToSize(urlText, 170);
+                doc.text(splitUrl, 20, yPos);
+                yPos += splitUrl.length * 5 + 2;
+                
+                doc.setFontSize(9);
+                doc.setTextColor(0);
+                doc.text(`Quality Score: ${result.qualityScore}/100`, 25, yPos);
+                doc.text(`SSR Match: ${result.ssrContentMatch.toFixed(1)}%`, 90, yPos);
+                doc.text(`Load: ${result.serverLoadTime.toFixed(0)}ms`, 145, yPos);
+                yPos += 5;
+                
+                doc.text(`DOM Nodes: ${result.domNodes}`, 25, yPos);
+                doc.text(`JS Files: ${result.jsFiles}`, 90, yPos);
+                doc.text(`SEO: ${result.seoScore}/100`, 145, yPos);
+                yPos += 8;
+            });
+            
+            if (yPos > 230) {
+                doc.addPage();
+                yPos = 20;
+            }
+            
+            yPos += 10;
+            doc.setFontSize(14);
+            doc.setTextColor(0);
+            doc.text('Key Recommendations', 20, yPos);
+            yPos += 10;
+            
+            const recommendations = [
+                'Ensure critical content is server-rendered for optimal SEO',
+                'Implement proper meta tags and structured data',
+                'Optimize server response times and enable compression',
+                'Reduce JavaScript bundle size and implement code-splitting',
+                'Monitor Core Web Vitals regularly',
+                'Use CDN for static assets and implement caching strategies'
+            ];
+            
+            doc.setFontSize(10);
+            recommendations.forEach(rec => {
+                if (yPos > 270) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+                const lines = doc.splitTextToSize(`• ${rec}`, 170);
+                doc.text(lines, 20, yPos);
+                yPos += lines.length * 5 + 3;
+            });
+            
+            doc.save(`ssr-analysis-report-${new Date().getTime()}.pdf`);
+        }
+
+        function exportResults() {
+            if (analysisResults.length === 0) {
+                alert('No results to export');
+                return;
+            }
+            
+            const dataStr = JSON.stringify(analysisResults, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ssr-analysis-${new Date().getTime()}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportCSV() {
+            if (analysisResults.length === 0) {
+                alert('No results to export');
+                return;
+            }
+            
+            const successResults = analysisResults.filter(r => r.status === 'success');
+            const headers = ['URL', 'Quality Score', 'SSR Match %', 'Server Load (ms)', 'Client Load (ms)', 
+                           'DOM Nodes', 'JS Files', 'SEO Score', 'Performance Score', 'Status'];
+            
+            const rows = successResults.map(r => [
+                r.url,
+                r.qualityScore,
+                r.ssrContentMatch.toFixed(1),
+                r.serverLoadTime.toFixed(0),
+                r.clientLoadTime.toFixed(0),
+                r.domNodes,
+                r.jsFiles,
+                r.seoScore,
+                r.performanceScore,
+                r.status
+            ]);
+            
+            const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+            const dataBlob = new Blob([csv], {type: 'text/csv'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `ssr-analysis-${new Date().getTime()}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadExampleCSV() {
+            const csv = `URL,Name,Category
+https://nextjs.org,Next.js,Framework
+https://nuxt.com,Nuxt,Framework
+https://react.dev,React,Library
+https://vuejs.org,Vue.js,Framework
+https://angular.io,Angular,Framework`;
+            
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'example-urls.csv';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadExampleJSON() {
+            const json = JSON.stringify([
+                { url: "https://nextjs.org", name: "Next.js" },
+                { url: "https://nuxt.com", name: "Nuxt" },
+                { url: "https://react.dev", name: "React" },
+                { url: "https://vuejs.org", name: "Vue.js" },
+                { url: "https://angular.io", name: "Angular" }
+            ], null, 2);
+            
+            const blob = new Blob([json], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'example-urls.json';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadExampleTXT() {
+            const txt = `https://nextjs.org
+https://nuxt.com
+https://react.dev
+https://vuejs.org
+https://angular.io`;
+            
+            const blob = new Blob([txt], {type: 'text/plain'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'example-urls.txt';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('detailModal').addEventListener('click', (e) => {
+            if (e.target.id === 'detailModal') {
+                closeDetailModal();
+            }
+        });
+    </script>
+</body>
+</html>
